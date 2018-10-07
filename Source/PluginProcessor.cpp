@@ -9,6 +9,7 @@
 */
 
 #include "PluginProcessor.h"
+#include <cstdlib>
 #include <iostream>
 #include "PluginEditor.h"
 
@@ -86,12 +87,13 @@ void MusicmakeathonAudioProcessor::prepareToPlay(double sampleRate, int samplesP
   auto* channelDataLeft = fileBuffer->getWritePointer(0);
   auto* channelDataRight = fileBuffer->getWritePointer(1);
   auto tempBuffer = new AudioBuffer<float>(1, bufferSize);
+  auto* tempData = tempBuffer->getWritePointer(0);
+  std::cout << "Reading file with " << fileBuffer->getNumSamples() << " samples"
+            << std::endl;
   for (int i = 0; i < fileBuffer->getNumSamples(); i++) {
     float mono = (channelDataLeft[i] + channelDataRight[i]) / 2;
-    auto* tempData = tempBuffer->getWritePointer(0);
     tempData[i % bufferSize] = mono;
-    if (i == bufferSize) {
-      std::cout << i << std::endl;
+    if (i % bufferSize == 0) {
       chunks.push_back(*tempBuffer);
       tempBuffer = new AudioBuffer<float>(1, bufferSize);
     }
@@ -160,7 +162,6 @@ void MusicmakeathonAudioProcessor::processBlock(AudioBuffer<float>& buffer,
     if (currentlyPlaying) {
       channelDataLeft[i] = sampleBufferFifo->front();
       channelDataRight[i] = sampleBufferFifo->front();
-
       sampleBufferFifo->pop();
       if (sampleBufferFifo->empty()) {
         // time to load new sample!
@@ -181,9 +182,14 @@ void MusicmakeathonAudioProcessor::findAndLoadSample(
   // set outputFifo to sound with least difference
 
   // for now, just set output to input
-  while (!inputFifo->empty()) {
-    outputFifo->push(inputFifo->front());
-    inputFifo->pop();
+  //   while (!inputFifo->empty()) {
+  //     outputFifo->push(inputFifo->front());
+  //     inputFifo->pop();
+  //   }
+  auto* data = chunks.at(rand() % chunks.size()).getWritePointer(0);
+  for (int i = 0; i < bufferSize; i++) {
+    std::cout << data[i] << std::endl;
+    outputFifo->push(data[i]);
   }
 }
 
