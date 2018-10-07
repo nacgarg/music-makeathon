@@ -9,8 +9,10 @@
 */
 
 #include "PluginProcessor.h"
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
+
 #include "PluginEditor.h"
 
 //==============================================================================
@@ -75,31 +77,49 @@ const String MusicmakeathonAudioProcessor::getProgramName(int index) { return {}
 void MusicmakeathonAudioProcessor::changeProgramName(int index, const String& newName) {}
 
 //==============================================================================
+
+void audioBufferToFloatArray(AudioBuffer<float>& buf, float* outArray) {
+  auto ptr = buf.getWritePointer(0);
+  for (int i = 0; i < buf.getNumSamples(); i++) {
+    outArray[i] = ptr[i];
+  }
+}
+
 void MusicmakeathonAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   // Use this method as the place to do any pre-playback
   // initialisation that you need..
-  File file("/home/nachi/BlastFromTokyo.wav");
+  File file("/home/nachi/rhodz.wav");
   formatManager.registerBasicFormats();
   AudioFormatReader* reader = formatManager.createReaderFor(file);
   auto fileBuffer = new AudioBuffer<float>(2, reader->lengthInSamples);
   reader->read(fileBuffer, 0, static_cast<int>(reader->lengthInSamples),
                static_cast<juce::int64>(0), true, false);
-  auto* channelDataLeft = fileBuffer->getWritePointer(0);
-  auto* channelDataRight = fileBuffer->getWritePointer(1);
-  auto tempBuffer = new AudioBuffer<float>(1, bufferSize);
-  auto* tempData = tempBuffer->getWritePointer(0);
+  auto* channelDataLeft = fileBuffer->getReadPointer(0);
+  auto* channelDataRight = fileBuffer->getReadPointer(1);
+  auto tempBuffer = AudioBuffer<float>(1, bufferSize);
+  auto* tempData = tempBuffer.getWritePointer(0);
   std::cout << "Reading file with " << fileBuffer->getNumSamples() << " samples"
             << std::endl;
   for (int i = 0; i < fileBuffer->getNumSamples(); i++) {
-    float mono = (channelDataLeft[i] + channelDataRight[i]) / 2;
+    float mono = (channelDataLeft[i] + channelDataRight[i]) / 2.0;
+
     tempData[i % bufferSize] = mono;
     if (i % bufferSize == 0) {
-      chunks.push_back(*tempBuffer);
-      tempBuffer = new AudioBuffer<float>(1, bufferSize);
+      auto copy = AudioBuffer<float>(tempBuffer);
+      chunks.push_back(copy);
+      tempBuffer = AudioBuffer<float>(1, bufferSize);
+      tempData = tempBuffer.getWritePointer(0);
     }
   }
   std::cout << chunks.size() << std::endl;
   delete reader;
+
+  for (int i = 0; i < chunks.size(); i++) {
+    float* chunkFFT = new float[bufferSize * 2];
+    audioBufferToFloatArray(chunks.at(i), chunkFFT);
+    forwardFFT.performFrequencyOnlyForwardTransform(chunkFFTData);
+    precomputedFFTs.push_back(chunkFFT);
+  }
 }
 
 void MusicmakeathonAudioProcessor::releaseResources() {
@@ -152,30 +172,56 @@ void MusicmakeathonAudioProcessor::processBlock(AudioBuffer<float>& buffer,
   // Alternatively, you can process the samples with the channels
   // interleaved by keeping the same state.
   int channel = 0;
-  auto* channelDataLeft = buffer.getWritePointer(0);
-  auto* channelDataRight = buffer.getWritePointer(1);
+  float* channelDataLeft = buffer.getWritePointer(0);
+  float* channelDataRight = buffer.getWritePointer(1);
 
   for (int i = 0; i < buffer.getNumSamples(); i++) {
     //   inputFifo.push(channelData[i]);
-    float mono = (channelDataLeft[i] + channelDataRight[i]) / 2;
+    float mono = (channelDataLeft[i] + channelDataRight[i]) / 2.0;
     inputFifo->push(mono);
+    std::cout << inputFifo->size() << " samples (" << inputFifo->size()/44100 << " seconds) behind" << std::endl;
     if (currentlyPlaying) {
       channelDataLeft[i] = sampleBufferFifo->front();
       channelDataRight[i] = sampleBufferFifo->front();
       sampleBufferFifo->pop();
-      if (sampleBufferFifo->empty()) {
+      if (sampleBufferFifo->size() <= bufferSize && inputFifo->size() >= bufferSize) {
         // time to load new sample!
         findAndLoadSample(inputFifo, sampleBufferFifo);
       }
-    } else {
+    } else if (inputFifo->size() >= bufferSize) {
       findAndLoadSample(inputFifo, sampleBufferFifo);
       currentlyPlaying = true;
     }
   }
 }
 
+
+float compareFFTs(float* fft1, float* fft2, int length) {
+  float score = 0;
+  for (int i = 0; i < length; i++) {
+    score += pow(fft1[i] - fft2[i], 2);
+  }
+  return score / length;
+}
+
 void MusicmakeathonAudioProcessor::findAndLoadSample(
     std::queue<float> inputFifo[bufferSize], std::queue<float> outputFifo[bufferSize]) {
+  for (int j = 0; j < bufferSize; j++) {
+    fftData[j] = inputFifo->front();
+    inputFifo->pop();
+  }
+  forwardFFT.performFrequencyOnlyForwardTransform(fftData);
+  float bestScore = std::numeric_limits<float>::max();
+  int bestIndex = 0;
+  for (int i = 0; i < precomputedFFTs.size(); i++) {
+    float score = compareFFTs(precomputedFFTs.at(i), fftData, bufferSize);
+    if (score < bestScore) {
+      bestScore = score;
+      bestIndex = i;
+    }
+  }
+  std::cout << bestIndex << std::endl;
+
   // compute FFT of inputFifo
   // for every sound
   // compute FFT and compare to input
@@ -186,10 +232,12 @@ void MusicmakeathonAudioProcessor::findAndLoadSample(
   //     outputFifo->push(inputFifo->front());
   //     inputFifo->pop();
   //   }
-  auto* data = chunks.at(rand() % chunks.size()).getWritePointer(0);
-  for (int i = 0; i < bufferSize; i++) {
-    std::cout << data[i] << std::endl;
-    outputFifo->push(data[i]);
+
+  auto* data = chunks.at(bestIndex).getWritePointer(0);
+  int i = 0;
+  for (int j = 0; j < bufferSize; j++) {
+    // inputFifo->pop();
+    outputFifo->push(data[j]);
   }
 }
 

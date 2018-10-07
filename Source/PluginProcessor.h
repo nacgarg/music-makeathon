@@ -58,16 +58,19 @@ class MusicmakeathonAudioProcessor : public AudioProcessor {
  private:
   //==============================================================================
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MusicmakeathonAudioProcessor)
-  static const int fftOrder = 13;
+  static const int fftOrder = 12;
   static const int bufferSize = 1 << fftOrder;
   std::queue<float> inputFifo[bufferSize];
-  float fftData[2 * bufferSize];
   std::queue<float> sampleBufferFifo[bufferSize];
   dsp::FFT forwardFFT;
+  float fftData[bufferSize * 2];
+  float chunkFFTData[bufferSize*2];
   bool nextFFTBlockReady;
   bool currentlyPlaying = false;
+  std::vector<float*> precomputedFFTs;
   void findAndLoadSample(std::queue<float>[bufferSize], std::queue<float>[bufferSize]);
   AudioFormatManager formatManager;
   std::unique_ptr<AudioFormatReaderSource> readerSource;
   std::vector<AudioBuffer<float>> chunks;
+  int lol;
 };
