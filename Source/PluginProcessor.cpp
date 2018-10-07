@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <thread>
 
 #include "PluginEditor.h"
 
@@ -88,7 +89,9 @@ void audioBufferToFloatArray(AudioBuffer<float>& buf, float* outArray) {
 void MusicmakeathonAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   // Use this method as the place to do any pre-playback
   // initialisation that you need..
-  File file("/home/nachi/rhodz.wav");
+  // array of files, store chunks in vector of Chunk struct which contains original
+  // filename
+  File file("/home/nachi/snarky.wav");
   formatManager.registerBasicFormats();
   AudioFormatReader* reader = formatManager.createReaderFor(file);
   auto fileBuffer = new AudioBuffer<float>(2, reader->lengthInSamples);
@@ -97,7 +100,8 @@ void MusicmakeathonAudioProcessor::prepareToPlay(double sampleRate, int samplesP
   auto* channelDataLeft = fileBuffer->getReadPointer(0);
   auto* channelDataRight = fileBuffer->getReadPointer(1);
   auto tempBuffer = AudioBuffer<float>(1, bufferSize);
-  auto* tempData = tempBuffer.getWritePointer(0);
+  float* tempData = tempBuffer.getWritePointer(0);
+  chunks.clear();
   std::cout << "Reading file with " << fileBuffer->getNumSamples() << " samples"
             << std::endl;
   for (int i = 0; i < fileBuffer->getNumSamples(); i++) {
@@ -174,53 +178,71 @@ void MusicmakeathonAudioProcessor::processBlock(AudioBuffer<float>& buffer,
   int channel = 0;
   float* channelDataLeft = buffer.getWritePointer(0);
   float* channelDataRight = buffer.getWritePointer(1);
-
+  bool shouldPlay = sampleBufferFifo->size() >= bufferSize;
   for (int i = 0; i < buffer.getNumSamples(); i++) {
     //   inputFifo.push(channelData[i]);
-    float mono = (channelDataLeft[i] + channelDataRight[i]) / 2.0;
+    float gain = 10;
+    float mono = (channelDataLeft[i] + channelDataRight[i]) / 2.0 * gain;
     inputFifo->push(mono);
-    std::cout << inputFifo->size() << " samples (" << inputFifo->size()/44100 << " seconds) behind" << std::endl;
-    if (currentlyPlaying) {
+    // std::cout << inputFifo->size() << " samples (" << inputFifo->size() / 44100
+    //   << " seconds) behind" << std::endl;
+    // std::cout << sampleBufferFifo->size() << " samples ("
+    //   << sampleBufferFifo->size() / 44100 << " seconds) in buffer" << std::endl;
+    if (!sampleBufferFifo->empty()) {
       channelDataLeft[i] = sampleBufferFifo->front();
       channelDataRight[i] = sampleBufferFifo->front();
       sampleBufferFifo->pop();
-      if (sampleBufferFifo->size() <= bufferSize && inputFifo->size() >= bufferSize) {
-        // time to load new sample!
-        findAndLoadSample(inputFifo, sampleBufferFifo);
-      }
-    } else if (inputFifo->size() >= bufferSize) {
-      findAndLoadSample(inputFifo, sampleBufferFifo);
-      currentlyPlaying = true;
     }
+  }
+  if (inputFifo->size() >= bufferSize && sampleBufferFifo->size() <= bufferSize) {
+    //   std::thread t1(f);
+    findAndLoadSample(inputFifo, sampleBufferFifo);
+    //   (, );
+    currentlyPlaying = true;
   }
 }
 
-
 float compareFFTs(float* fft1, float* fft2, int length) {
   float score = 0;
+  auto lvl1 = FloatVectorOperations::findMinAndMax(fft1, length);
+  auto lvl2 = FloatVectorOperations::findMinAndMax(fft2, length);
+  float avgLvl = (lvl1.getEnd() + lvl2.getEnd()) / 2;
+  //   std::cout << lvl1.getEnd() << " " << lvl2.getEnd() << std::endl;
+
   for (int i = 0; i < length; i++) {
-    score += pow(fft1[i] - fft2[i], 2);
+    score += (fft1[i] - fft2[i]) * (fft1[i] - fft2[i]);
   }
-  return score / length;
+  //   std::cout << score << std::endl;
+  return score / (length * avgLvl);
 }
 
 void MusicmakeathonAudioProcessor::findAndLoadSample(
     std::queue<float> inputFifo[bufferSize], std::queue<float> outputFifo[bufferSize]) {
+  float max = 0;
   for (int j = 0; j < bufferSize; j++) {
-    fftData[j] = inputFifo->front();
+    fftData[j] = inputFifo->front();  // divide by max here
     inputFifo->pop();
+    if (std::abs(fftData[j]) > max) {
+      max = std::abs(fftData[j]);
+    }
   }
+  // normalize samples before fft
+  for (int j = 0; j < bufferSize; j++) {
+    fftData[j] /= max;
+  }
+
   forwardFFT.performFrequencyOnlyForwardTransform(fftData);
   float bestScore = std::numeric_limits<float>::max();
   int bestIndex = 0;
   for (int i = 0; i < precomputedFFTs.size(); i++) {
-    float score = compareFFTs(precomputedFFTs.at(i), fftData, bufferSize);
-    if (score < bestScore) {
+    float score = compareFFTs(precomputedFFTs.at(i), fftData, bufferSize / 2);
+    if (score < bestScore && i != lastSampleIndex && score > 1) {
       bestScore = score;
       bestIndex = i;
     }
   }
-  std::cout << bestIndex << std::endl;
+  //   std::cout << bestIndex << std::endl;
+  lastSampleIndex = bestIndex;
 
   // compute FFT of inputFifo
   // for every sound
