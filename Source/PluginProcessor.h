@@ -54,6 +54,8 @@ class MusicmakeathonAudioProcessor : public AudioProcessor {
   //==============================================================================
   void getStateInformation(MemoryBlock& destData) override;
   void setStateInformation(const void* data, int sizeInBytes) override;
+  String currentFilename;
+  void changeSong();
 
  private:
   //==============================================================================
@@ -75,4 +77,5 @@ class MusicmakeathonAudioProcessor : public AudioProcessor {
   std::vector<AudioBuffer<float>> chunks;
   int lol;
   int lastSampleIndex;
+  std::vector<String> filenames;
 };

@@ -115,6 +115,7 @@ void MusicmakeathonAudioProcessor::loadFiles(Array<File> files) {
       if (i % bufferSize == 0) {
         auto copy = AudioBuffer<float>(tempBuffer);
         chunks.push_back(copy);
+        filenames.push_back(file.getFileName());
         tempBuffer = AudioBuffer<float>(1, bufferSize);
         tempData = tempBuffer.getWritePointer(0);
       }
@@ -133,14 +134,19 @@ void MusicmakeathonAudioProcessor::loadFiles(Array<File> files) {
     precomputedFFTs.push_back(chunkFFT);
   }
 }
-void MusicmakeathonAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-  // Use this method as the place to do any pre-playback
-  // initialisation that you need..
+void MusicmakeathonAudioProcessor::changeSong() {
+  suspendProcessing(true);
   FileChooser chooser("Select a Wave file to play...", File::nonexistent, "*.wav");
   if (chooser.browseForMultipleFilesOrDirectories()) {
     auto files = chooser.getResults();
     loadFiles(files);
   }
+  suspendProcessing(false);
+}
+void MusicmakeathonAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
+  // Use this method as the place to do any pre-playback
+  // initialisation that you need..
+  changeSong();
 }
 
 void MusicmakeathonAudioProcessor::releaseResources() {
@@ -280,7 +286,8 @@ void MusicmakeathonAudioProcessor::findAndLoadSample(
 
   //   std::cout << bestIndex << std::endl;
   lastSampleIndex = bestIndex;
-
+  currentFilename = filenames.at(bestIndex);
+  std::cout << "playing " << currentFilename << std::endl;
   // compute FFT of inputFifo
   // for every sound
   // compute FFT and compare to input
