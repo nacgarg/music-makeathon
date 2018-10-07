@@ -69,6 +69,7 @@ class MusicmakeathonAudioProcessor : public AudioProcessor {
   bool currentlyPlaying = false;
   std::vector<float*> precomputedFFTs;
   void findAndLoadSample(std::queue<float>[bufferSize], std::queue<float>[bufferSize]);
+  void loadFiles(Array<File> files);
   AudioFormatManager formatManager;
   std::unique_ptr<AudioFormatReaderSource> readerSource;
   std::vector<AudioBuffer<float>> chunks;

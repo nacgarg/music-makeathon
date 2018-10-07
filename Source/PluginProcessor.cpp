@@ -93,44 +93,53 @@ void audioBufferToFloatArray(AudioBuffer<float>& buf, float* outArray) {
   }
 }
 
-void MusicmakeathonAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-  // Use this method as the place to do any pre-playback
-  // initialisation that you need..
+void MusicmakeathonAudioProcessor::loadFiles(Array<File> files) {
+  chunks.clear();
+  for (int a = 0; a < files.size(); a++) {
+    auto file = files[a];
+    formatManager.registerBasicFormats();
+    AudioFormatReader* reader = formatManager.createReaderFor(file);
+    auto fileBuffer = new AudioBuffer<float>(2, reader->lengthInSamples);
+    reader->read(fileBuffer, 0, static_cast<int>(reader->lengthInSamples),
+                 static_cast<juce::int64>(0), true, false);
+    auto* channelDataLeft = fileBuffer->getReadPointer(0);
+    auto* channelDataRight = fileBuffer->getReadPointer(1);
+    auto tempBuffer = AudioBuffer<float>(1, bufferSize);
+    float* tempData = tempBuffer.getWritePointer(0);
+    std::cout << "Reading file with " << fileBuffer->getNumSamples() << " samples"
+              << std::endl;
+    for (int i = 0; i < fileBuffer->getNumSamples(); i++) {
+      float mono = (channelDataLeft[i] + channelDataRight[i]) / 2.0;
 
-  File file("/home/nachi/snarky.wav");//code/music-makeathon/TEST FILE.aif");
+      tempData[i % bufferSize] = mono;
+      if (i % bufferSize == 0) {
+        auto copy = AudioBuffer<float>(tempBuffer);
+        chunks.push_back(copy);
+        tempBuffer = AudioBuffer<float>(1, bufferSize);
+        tempData = tempBuffer.getWritePointer(0);
+      }
+    }
+    delete reader;
+  }
   // array of files, store chunks in vector of Chunk struct which contains original
   // filename
-  formatManager.registerBasicFormats();
-  AudioFormatReader* reader = formatManager.createReaderFor(file);
-  auto fileBuffer = new AudioBuffer<float>(2, reader->lengthInSamples);
-  reader->read(fileBuffer, 0, static_cast<int>(reader->lengthInSamples),
-               static_cast<juce::int64>(0), true, false);
-  auto* channelDataLeft = fileBuffer->getReadPointer(0);
-  auto* channelDataRight = fileBuffer->getReadPointer(1);
-  auto tempBuffer = AudioBuffer<float>(1, bufferSize);
-  float* tempData = tempBuffer.getWritePointer(0);
-  chunks.clear();
-  std::cout << "Reading file with " << fileBuffer->getNumSamples() << " samples"
-            << std::endl;
-  for (int i = 0; i < fileBuffer->getNumSamples(); i++) {
-    float mono = (channelDataLeft[i] + channelDataRight[i]) / 2.0;
 
-    tempData[i % bufferSize] = mono;
-    if (i % bufferSize == 0) {
-      auto copy = AudioBuffer<float>(tempBuffer);
-      chunks.push_back(copy);
-      tempBuffer = AudioBuffer<float>(1, bufferSize);
-      tempData = tempBuffer.getWritePointer(0);
-    }
-  }
   std::cout << chunks.size() << std::endl;
-  delete reader;
 
   for (int i = 0; i < chunks.size(); i++) {
     float* chunkFFT = new float[bufferSize * 2];
     audioBufferToFloatArray(chunks.at(i), chunkFFT);
     forwardFFT.performFrequencyOnlyForwardTransform(chunkFFT);
     precomputedFFTs.push_back(chunkFFT);
+  }
+}
+void MusicmakeathonAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
+  // Use this method as the place to do any pre-playback
+  // initialisation that you need..
+  FileChooser chooser("Select a Wave file to play...", File::nonexistent, "*.wav");
+  if (chooser.browseForMultipleFilesOrDirectories()) {
+    auto files = chooser.getResults();
+    loadFiles(files);
   }
 }
 
@@ -197,8 +206,8 @@ void MusicmakeathonAudioProcessor::processBlock(AudioBuffer<float>& buffer,
     // std::cout << sampleBufferFifo->size() << " samples ("
     //   << sampleBufferFifo->size() / 44100 << " seconds) in buffer" << std::endl;
     if (!sampleBufferFifo->empty()) {
-      channelDataLeft[i] = (mono*0.3 + sampleBufferFifo->front()*0.7);
-      channelDataRight[i] = (mono*0.3 + sampleBufferFifo->front()*0.7);
+      channelDataLeft[i] = (mono * 0.1 + sampleBufferFifo->front() * 0.9);
+      channelDataRight[i] = (mono * 0.1 + sampleBufferFifo->front() * 0.9);
       sampleBufferFifo->pop();
     }
   }
@@ -217,7 +226,7 @@ float compareFFTs(float* fft1, float* fft2, int length) {
   float avgLvl = (lvl1.getEnd() + lvl2.getEnd()) / 2;
   //   std::cout << lvl1.getEnd() << " " << lvl2.getEnd() << std::endl;
 
-  for (int i = 0; i < length; i++) {
+  for (int i = 0; i < length; i += 2) {
     score += (fft1[i] - fft2[i]) * (fft1[i] - fft2[i]);
   }
   //   std::cout << score << std::endl;
