@@ -89,7 +89,7 @@ void audioBufferToFloatArray(AudioBuffer<float>& buf, float* outArray) {
     }
   }
   for (int i = 0; i < buf.getNumSamples(); i++) {
-    outArray[i] /= max;
+    // outArray[i] /= max;
   }
 }
 
@@ -97,7 +97,7 @@ void MusicmakeathonAudioProcessor::prepareToPlay(double sampleRate, int samplesP
   // Use this method as the place to do any pre-playback
   // initialisation that you need..
 
-  File file("/home/nachi/snarky.wav");
+  File file("/home/nachi/snarky.wav");//code/music-makeathon/TEST FILE.aif");
   // array of files, store chunks in vector of Chunk struct which contains original
   // filename
   formatManager.registerBasicFormats();
@@ -197,8 +197,8 @@ void MusicmakeathonAudioProcessor::processBlock(AudioBuffer<float>& buffer,
     // std::cout << sampleBufferFifo->size() << " samples ("
     //   << sampleBufferFifo->size() / 44100 << " seconds) in buffer" << std::endl;
     if (!sampleBufferFifo->empty()) {
-      channelDataLeft[i] = sampleBufferFifo->front();
-      channelDataRight[i] = sampleBufferFifo->front();
+      channelDataLeft[i] = (mono*0.3 + sampleBufferFifo->front()*0.7);
+      channelDataRight[i] = (mono*0.3 + sampleBufferFifo->front()*0.7);
       sampleBufferFifo->pop();
     }
   }
@@ -236,9 +236,9 @@ void MusicmakeathonAudioProcessor::findAndLoadSample(
   }
   std::cout << "max: " << max << std::endl;
   // normalize samples before fft
-  for (int j = 0; j < bufferSize; j++) {
-    fftData[j] /= max;
-  }
+  //   for (int j = 0; j < bufferSize; j++) {
+  // fftData[j] /= max;
+  //   }
 
   forwardFFT.performFrequencyOnlyForwardTransform(fftData);
 
