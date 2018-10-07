@@ -212,8 +212,8 @@ void MusicmakeathonAudioProcessor::processBlock(AudioBuffer<float>& buffer,
     // std::cout << sampleBufferFifo->size() << " samples ("
     //   << sampleBufferFifo->size() / 44100 << " seconds) in buffer" << std::endl;
     if (!sampleBufferFifo->empty()) {
-      channelDataLeft[i] = (mono * 0.1 + sampleBufferFifo->front() * 0.9);
-      channelDataRight[i] = (mono * 0.1 + sampleBufferFifo->front() * 0.9);
+      channelDataLeft[i] = (mono * 0 + sampleBufferFifo->front() * 1);
+      channelDataRight[i] = (mono * 0 + sampleBufferFifo->front() * 1);
       sampleBufferFifo->pop();
     }
   }
