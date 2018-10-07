@@ -9,6 +9,7 @@
 */
 
 #include "PluginProcessor.h"
+#include <iostream>
 #include "PluginEditor.h"
 
 //==============================================================================
@@ -76,6 +77,27 @@ void MusicmakeathonAudioProcessor::changeProgramName(int index, const String& ne
 void MusicmakeathonAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   // Use this method as the place to do any pre-playback
   // initialisation that you need..
+  File file("/home/nachi/BlastFromTokyo.wav");
+  formatManager.registerBasicFormats();
+  AudioFormatReader* reader = formatManager.createReaderFor(file);
+  auto fileBuffer = new AudioBuffer<float>(2, reader->lengthInSamples);
+  reader->read(fileBuffer, 0, static_cast<int>(reader->lengthInSamples),
+               static_cast<juce::int64>(0), true, false);
+  auto* channelDataLeft = fileBuffer->getWritePointer(0);
+  auto* channelDataRight = fileBuffer->getWritePointer(1);
+  auto tempBuffer = new AudioBuffer<float>(1, bufferSize);
+  for (int i = 0; i < fileBuffer->getNumSamples(); i++) {
+    float mono = (channelDataLeft[i] + channelDataRight[i]) / 2;
+    auto* tempData = tempBuffer->getWritePointer(0);
+    tempData[i % bufferSize] = mono;
+    if (i == bufferSize) {
+      std::cout << i << std::endl;
+      chunks.push_back(*tempBuffer);
+      tempBuffer = new AudioBuffer<float>(1, bufferSize);
+    }
+  }
+  std::cout << chunks.size() << std::endl;
+  delete reader;
 }
 
 void MusicmakeathonAudioProcessor::releaseResources() {
@@ -127,28 +149,38 @@ void MusicmakeathonAudioProcessor::processBlock(AudioBuffer<float>& buffer,
   // the samples and the outer loop is handling the channels.
   // Alternatively, you can process the samples with the channels
   // interleaved by keeping the same state.
-  for (int channel = 0; channel < totalNumInputChannels; ++channel) {
+  for (int channel = 0; channel < 1; ++channel) {
     auto* channelData = buffer.getWritePointer(channel);
     for (int i = 0; i < buffer.getNumSamples(); i++) {
       //   inputFifo.push(channelData[i]);
       inputFifo->push(channelData[i]);
-      if (!nextOutputReady) {
+      if (currentlyPlaying) {
         channelData[i] = sampleBufferFifo->front();
         sampleBufferFifo->pop();
         if (sampleBufferFifo->empty()) {
-            // time to load new sample!
-            findAndLoadSample(inputFifo, sampleBufferFifo);
+          // time to load new sample!
+          findAndLoadSample(inputFifo, sampleBufferFifo);
         }
+      } else {
+        findAndLoadSample(inputFifo, sampleBufferFifo);
+        currentlyPlaying = true;
       }
     }
   }
 }
 
-void MusicmakeathonAudioProcessor::findAndLoadSample(std::queue<float> inputFifo[bufferSize], std::queue<float> outputFifo[bufferSize]) {
-    // compute FFT of inputFifo
-    // for every sound
-        // compute FFT and compare to input
-    // set outputFifo to sound with least difference
+void MusicmakeathonAudioProcessor::findAndLoadSample(
+    std::queue<float> inputFifo[bufferSize], std::queue<float> outputFifo[bufferSize]) {
+  // compute FFT of inputFifo
+  // for every sound
+  // compute FFT and compare to input
+  // set outputFifo to sound with least difference
+
+  // for now, just set output to input
+  while (!inputFifo->empty()) {
+    outputFifo->push(inputFifo->front());
+    inputFifo->pop();
+  }
 }
 
 //==============================================================================
