@@ -81,8 +81,15 @@ void MusicmakeathonAudioProcessor::changeProgramName(int index, const String& ne
 
 void audioBufferToFloatArray(AudioBuffer<float>& buf, float* outArray) {
   auto ptr = buf.getWritePointer(0);
+  float max = 0;
   for (int i = 0; i < buf.getNumSamples(); i++) {
     outArray[i] = ptr[i];
+    if (std::abs(outArray[i] > max)) {
+      max = outArray[i];
+    }
+  }
+  for (int i = 0; i < buf.getNumSamples(); i++) {
+    outArray[i] /= max;
   }
 }
 
@@ -90,7 +97,7 @@ void MusicmakeathonAudioProcessor::prepareToPlay(double sampleRate, int samplesP
   // Use this method as the place to do any pre-playback
   // initialisation that you need..
 
-  File file("/Users/SamSmith/Desktop/projects in current use/dreams/Bounces/dreams master 1.wav");
+  File file("/home/nachi/snarky.wav");
   // array of files, store chunks in vector of Chunk struct which contains original
   // filename
   formatManager.registerBasicFormats();
@@ -122,7 +129,7 @@ void MusicmakeathonAudioProcessor::prepareToPlay(double sampleRate, int samplesP
   for (int i = 0; i < chunks.size(); i++) {
     float* chunkFFT = new float[bufferSize * 2];
     audioBufferToFloatArray(chunks.at(i), chunkFFT);
-    forwardFFT.performFrequencyOnlyForwardTransform(chunkFFTData);
+    forwardFFT.performFrequencyOnlyForwardTransform(chunkFFT);
     precomputedFFTs.push_back(chunkFFT);
   }
 }
@@ -214,7 +221,7 @@ float compareFFTs(float* fft1, float* fft2, int length) {
     score += (fft1[i] - fft2[i]) * (fft1[i] - fft2[i]);
   }
   //   std::cout << score << std::endl;
-  return score / (length * avgLvl);
+  return score / length;
 }
 
 void MusicmakeathonAudioProcessor::findAndLoadSample(
@@ -227,21 +234,41 @@ void MusicmakeathonAudioProcessor::findAndLoadSample(
       max = std::abs(fftData[j]);
     }
   }
+  std::cout << "max: " << max << std::endl;
   // normalize samples before fft
   for (int j = 0; j < bufferSize; j++) {
     fftData[j] /= max;
   }
 
   forwardFFT.performFrequencyOnlyForwardTransform(fftData);
+
+  float maxAmp = 0;
+  float maxIndex = 0;
+  for (int i = 0; i < bufferSize; i++) {
+    if (fftData[i] > maxAmp) {
+      maxAmp = fftData[i];
+      maxIndex = i;
+    }
+  }
+  std::cout << "max for input: " << maxIndex << std::endl;
   float bestScore = std::numeric_limits<float>::max();
   int bestIndex = 0;
   for (int i = 0; i < precomputedFFTs.size(); i++) {
     float score = compareFFTs(precomputedFFTs.at(i), fftData, bufferSize / 2);
-    if (score < bestScore && i != lastSampleIndex && score > 1) {
+    if (score < bestScore) {
       bestScore = score;
       bestIndex = i;
     }
   }
+  maxAmp = 0;
+  for (int i = 0; i < bufferSize; i++) {
+    if (fftData[i] > maxAmp) {
+      maxAmp = precomputedFFTs.at(bestIndex)[i];
+      maxIndex = i;
+    }
+  }
+  std::cout << "max for best: " << maxIndex << std::endl;
+
   //   std::cout << bestIndex << std::endl;
   lastSampleIndex = bestIndex;
 
