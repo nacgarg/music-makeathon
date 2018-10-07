@@ -149,22 +149,26 @@ void MusicmakeathonAudioProcessor::processBlock(AudioBuffer<float>& buffer,
   // the samples and the outer loop is handling the channels.
   // Alternatively, you can process the samples with the channels
   // interleaved by keeping the same state.
-  for (int channel = 0; channel < 1; ++channel) {
-    auto* channelData = buffer.getWritePointer(channel);
-    for (int i = 0; i < buffer.getNumSamples(); i++) {
-      //   inputFifo.push(channelData[i]);
-      inputFifo->push(channelData[i]);
-      if (currentlyPlaying) {
-        channelData[i] = sampleBufferFifo->front();
-        sampleBufferFifo->pop();
-        if (sampleBufferFifo->empty()) {
-          // time to load new sample!
-          findAndLoadSample(inputFifo, sampleBufferFifo);
-        }
-      } else {
+  int channel = 0;
+  auto* channelDataLeft = buffer.getWritePointer(0);
+  auto* channelDataRight = buffer.getWritePointer(1);
+
+  for (int i = 0; i < buffer.getNumSamples(); i++) {
+    //   inputFifo.push(channelData[i]);
+    float mono = (channelDataLeft[i] + channelDataRight[i]) / 2;
+    inputFifo->push(mono);
+    if (currentlyPlaying) {
+      channelDataLeft[i] = sampleBufferFifo->front();
+      channelDataRight[i] = sampleBufferFifo->front();
+
+      sampleBufferFifo->pop();
+      if (sampleBufferFifo->empty()) {
+        // time to load new sample!
         findAndLoadSample(inputFifo, sampleBufferFifo);
-        currentlyPlaying = true;
       }
+    } else {
+      findAndLoadSample(inputFifo, sampleBufferFifo);
+      currentlyPlaying = true;
     }
   }
 }
