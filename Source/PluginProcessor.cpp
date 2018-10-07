@@ -88,7 +88,7 @@ void audioBufferToFloatArray(AudioBuffer<float>& buf, float* outArray) {
 void MusicmakeathonAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   // Use this method as the place to do any pre-playback
   // initialisation that you need..
-  File file("/home/nachi/rhodz.wav");
+  File file("/Users/SamSmith/Desktop/projects in current use/dreams/Bounces/dreams master 1.wav");
   formatManager.registerBasicFormats();
   AudioFormatReader* reader = formatManager.createReaderFor(file);
   auto fileBuffer = new AudioBuffer<float>(2, reader->lengthInSamples);
